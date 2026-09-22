@@ -1,8 +1,10 @@
 # Vlog plan — Spider-Verse OS, built in public
 
-> **Provenance note:** drafted with AI assistance (GLM (glm-5.3-flash) by
-> Z.ai) from Anthony's format decisions; a living document — Anthony edits,
-> AI maintains. Items marked **[OPEN]** are Anthony's calls, not yet made.
+> **Status: MOVED.** This plan now lives at
+> `heim-docs/src/content/webdev-of-reality/svos-vlog-plan.mdx`
+> (on the heim server, part of heim-docs) — vlog planning is personal
+> content, so it lives with the other content docs, not in the OS repo.
+> This stub stays so the commit history links the two.
 
 ## Format decisions (locked)
 
