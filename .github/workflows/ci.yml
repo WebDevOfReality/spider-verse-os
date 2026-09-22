@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  stage0-toolchain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make patch wget xz-utils bzip2 file bison flex
+      - name: Build cross-toolchain
+        run: ./toolchain/build.sh
+      - name: Smoke test — hello world in QEMU-less mode
+        run: |
+          export PATH=$PWD/toolchain/out/toolchain/bin:$PATH
+          printf '#include <stdio.h>\nint main(){puts("weaver");}\n' > /tmp/hello.c
+          x86_64-svos-linux-musl-gcc -static -o /tmp/hello /tmp/hello.c
+          file /tmp/hello | grep -q 'statically linked'
