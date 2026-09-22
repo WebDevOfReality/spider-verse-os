@@ -15,7 +15,8 @@
   https://www.linuxfromscratch.org/lfs/
 - **How Linux Works** (Brian Ward, 3rd ed.) — boot → kernel → init →
   userspace mental model in one book.
-- ▶️ **"Linux From Scratch Speedrun" — Adam Nielsen (YouTube)** — the whole
+- ▶️ **"LINUX FROM SCRATCH SPEEDRUN" — jlxip (YouTube,
+  https://www.youtube.com/watch?v=PochpBXKobw)** — the whole
   journey in ~40 min. Watch before Stage 0.
 
 ## Per stage
