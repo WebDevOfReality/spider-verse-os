@@ -35,10 +35,11 @@ write themselves.)
 
 ## The plan — Phase 1: "Weaver"
 
-Architecture: **initramfs-first** (Talos/TinyCore-style). The OS is a tiny
+Architecture: **initramfs-first**. The OS is a tiny
 kernel + musl/busybox initramfs that boots to RAM; the mesh (nebula) is baked
 in; `apk` (built from source) installs extensions at runtime onto a writable
-overlay. Nix never touches a running device; there is no package-managed root.
+overlay. There is no package-managed root. (The same shape other minimal
+distros use, but ours is built entirely from source.)
 
 | Stage | What we build from source | Exit criterion | Vlog episode |
 |---|---|---|---|
@@ -56,9 +57,9 @@ pivot** to Plan B (below). Stages 0–2 remain vlog content either way.
 ## Plan B (documented fallback)
 
 If the from-scratch road stalls, Spider-Verse OS ships as an **Alpine
-extension** instead: our own ISO + APK repo + `svos-enroll`, built
-reproducibly by a thin Nix flake (orchestration only; pure Alpine runtime).
-The architecture (editions: server/media/nas/edge, enrollment, editions table)
+extension** instead: our own ISO + APK repo + `svos-enroll`, built with a
+simple pinned-package build script (pure Alpine runtime, no exotic tooling).
+The architecture (editions: server/media/nas/edge, enrollment)
 carries over unchanged. Weaver stages 0–2 still ship as learning content.
 
 ## Editions (from Stage 5 onward)

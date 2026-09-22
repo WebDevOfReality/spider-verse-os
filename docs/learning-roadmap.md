@@ -36,7 +36,9 @@
 **DO:** write busybox init scripts by hand first, then `svos-init` in C
 - Tiny Core architecture (short, gold):
   http://www.tinycorelinux.net/architecture.html
-- Talos Linux architecture docs (the production version of this idea)
+- Talos Linux architecture docs — worth reading as the production-grade
+  implementation of the same initramfs-first shape (comparison study, not a
+  dependency)
 - C: https://beej.us/guide/bgc/
 
 ### Stage 3 — The Web (Nebula)
