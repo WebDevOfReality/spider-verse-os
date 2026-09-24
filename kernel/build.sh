@@ -65,6 +65,17 @@ if [ ! -x rootfs/bin/busybox ] || [ ! -f rootfs/init ]; then
 	"$HERE/rootfs/populate" rootfs/bin/busybox rootfs
 	cp "$HERE/rootfs/init" rootfs/init
 	chmod +x rootfs/init
+	# svos-init (Stage 2): our own PID 1, built from source
+	# rootfs/init is a shim that execs it so the kernel sees a scriptable
+	# entry point; svos-init itself is a static ELF at /sbin/svos-init
+	make -C "$HERE/../init" check >/dev/null
+	cp "$HERE/../init/svos-init" rootfs/sbin/svos-init
+	# etc: inittab + init.d boot/shutdown scripts (busybox-init fallback)
+	mkdir -p rootfs/etc/init.d
+	cp "$HERE/rootfs/etc/inittab" rootfs/etc/inittab
+	cp "$HERE/rootfs/etc/init.d/rcS" rootfs/etc/init.d/rcS
+	cp "$HERE/rootfs/etc/init.d/rcK" rootfs/etc/init.d/rcK
+	chmod +x rootfs/etc/init.d/rcS rootfs/etc/init.d/rcK
 	file rootfs/bin/busybox | grep -q 'statically linked' || {
 		echo "busybox is not static — aborting" >&2; exit 1
 	}
@@ -127,4 +138,37 @@ grep -aq 'SVOS-MARKER-42' qemu.log && echo '==> PASS: shell executes commands' |
 	echo '==> FAIL: shell did not answer' >&2
 	exit 1
 }
-echo "==> Stage 1 complete."
+
+# ---------- 6. bootable artifact (Stage 2d) ----------
+# squashfs userland on a qcow2 disk, mountable as /dev/vda in the guest.
+# Best-effort: needs mksquashfs + qemu-img on the host.
+if command -v mksquashfs >/dev/null 2>&1 && command -v qemu-img >/dev/null 2>&1; then
+	echo "==> building disk artifact (weaver.qcow2)"
+	sh "$HERE/../scripts/mkimage.sh" || {
+		echo '==> FAIL: mkimage.sh failed' >&2
+		exit 1
+	}
+	# verify the artifact actually mounts in the guest
+	{
+		sleep 8
+		echo 'mkdir /sq; mount -t squashfs /dev/vda /sq && echo SQFS-ARTIFACT-OK; umount /sq'
+		sleep 3
+		echo 'poweroff -f'
+		sleep 5
+	} | timeout 60 qemu-system-x86_64 \
+		-m 512 \
+		-kernel "linux-${KERNEL_VERSION}/arch/x86/boot/bzImage" \
+		-append 'console=ttyS0 rdinit=/init panic=-1' \
+		-nographic -no-reboot \
+		-drive file="$OUT/weaver.qcow2",format=qcow2,if=virtio,readonly=on \
+		> qemu-image.log 2>&1 || true
+	grep -aq 'SQFS-ARTIFACT-OK' qemu-image.log && echo '==> PASS: artifact mounts in guest' || {
+		echo '==> FAIL: image did not mount in guest' >&2
+		tail -20 qemu-image.log
+		exit 1
+	}
+else
+	echo "==> skipping disk artifact (mksquashfs/qemu-img missing on host)"
+fi
+
+echo "==> Stage 2 complete."

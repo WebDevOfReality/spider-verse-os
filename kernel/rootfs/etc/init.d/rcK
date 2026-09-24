@@ -1,0 +1,10 @@
+#!/bin/sh
+# rcK — system shutdown script, run by busybox init before halt/reboot.
+# Undo what rcS mounted. Order matters: everything over /proc, then /proc.
+
+/bin/sync
+/bin/umount /tmp 2>/dev/null
+/bin/umount /dev 2>/dev/null
+/bin/umount /sys 2>/dev/null
+/bin/umount /proc 2>/dev/null
+exit 0

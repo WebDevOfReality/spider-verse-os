@@ -1,0 +1,21 @@
+# /etc/inittab — busybox init(8) for Spider-Verse OS (Stage 2a)
+#
+# format: <id>:<runlevels>:<action>:<command>
+# actions we use:
+#   sysinit — run once, before anything else, init waits for it
+#   respawn — restart the command if it dies (PID 1 must never idle)
+#   restart — on ctrlaltdel equivalent (SIGHUP to init)
+#   ctrlaltdel — SIGINT on the console
+#   shutdown — before reboot/halt
+
+# mount the pseudo-filesystems and set up the console
+::sysinit:/etc/init.d/rcS
+
+# one shell on the console, respawned forever if it exits
+ttyS0::respawn:/bin/sh
+
+# ctrl-alt-del: busybox init gets SIGINT on the console tty
+::ctrlaltdel:/sbin/reboot
+
+# before halt/reboot, unmount what rcS mounted
+::shutdown:/etc/init.d/rcK

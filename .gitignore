@@ -15,3 +15,5 @@ out/
 
 # Personal notes (Anthony's, not published)
 dossier/
+# built binaries
+init/svos-init

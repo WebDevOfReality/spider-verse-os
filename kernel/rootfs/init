@@ -1,28 +1,13 @@
 #!/bin/sh
-# /init - PID 1 for the Weaver initramfs (Stage 1 skeleton).
-# Stage 2 replaces this with svos-init (C). Keep it honest and tiny.
+# /init — PID 1 entry point for the Weaver initramfs (Stage 2b).
+#
+# The kernel execs exactly this file as PID 1. svos-init (a static ELF
+# built from init/svos-init.c) does the real work: mount pseudo-fs, open
+# the console, spawn+respawn a shell, reap orphans, never exit.
+#
+# Why a shim instead of making /init the ELF itself? It keeps the entry
+# point debuggable (swap to busybox init for A/B testing by editing one
+# line) and lets us print which init is running before handing off.
 
-/bin/busybox mkdir -p /proc /sys /dev /tmp
-/bin/busybox mount -t proc none /proc
-/bin/busybox mount -t sysfs none /sys
-/bin/busybox mount -t devtmpfs none /dev
-# PID 1's stdio is not guaranteed to be the console (devtmpfs was not
-# mounted when the kernel opened it) — re-bind now that /dev exists
-exec </dev/console >/dev/console 2>&1
-
-echo
-echo '        .-"""-.        Spider-Verse OS'
-echo '       / _   _ \       ==========================='
-echo '      | (o) (o) |      Weaver initramfs (Stage 1)'
-echo '      |    ^    |'
-echo '       \  ---  /       kernel: our own build'
-echo '        `-----`        libc:   musl | userland: busybox'
-echo '      web-spinner'
-echo
-
-# PID 1 must never exit: respawn a shell on the console forever
-while :; do
-	setsid sh -c 'exec sh </dev/console >/dev/console 2>&1'
-	echo "init: shell exited, respawning"
-	sleep 1
-done
+/bin/busybox mkdir -p /proc /sys /dev /tmp /run /sbin
+exec /sbin/svos-init

@@ -8,6 +8,15 @@
 # --- syscall layer: musl/busybox hard requirements (EXPERT-off in tiny) ---
 CONFIG_BINFMT_ELF=y          # or /init never execs
 CONFIG_BINFMT_SCRIPT=y       # #!/bin/sh support for /init
+
+# Stage 2d: bootable artifacts (squashfs root, ISO boot)
+CONFIG_MISC_FILESYSTEMS=y    # menu gate for squashfs (allnoconfig kills it)
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_XZ=y
+CONFIG_BLK_DEV=y
+CONFIG_BLK_DEV_LOOP=y        # losetup for squashfs
+CONFIG_ISO9660_FS=y          # El Torito ISO boot
+CONFIG_RD_XZ=y
 CONFIG_FUTEX=y               # musl threads/locks
 CONFIG_EPOLL=y               # event loops (nebula, later k3s)
 CONFIG_POSIX_TIMERS=y
