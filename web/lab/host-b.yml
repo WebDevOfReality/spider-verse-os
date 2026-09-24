@@ -1,0 +1,49 @@
+# host-b.yml — Nebula config for lab host-b (10.99.99.3)
+# Mirrors host-a; only the cert names differ.
+
+tun:
+  disabled: false
+  dev: nebula0
+  drop_local_broadcast: false
+  drop_multicast: false
+  tx_queue: 500
+  rx_queue: 500
+  mtu: 1300
+
+listen:
+  host: 0.0.0.0
+  port: 4242
+
+pki:
+  ca: /media/etc/nebula/ca.crt
+  cert: /media/etc/nebula/host-b.crt
+  key: /media/etc/nebula/host-b.key
+
+lighthouse:
+  am_lighthouse: false
+  interval: 10
+  # ask this lighthouse for the peer list (needed to learn host-a's underlay)
+  hosts:
+    - 10.99.99.1
+
+static_host_map:
+  10.99.99.1: ["192.168.200.1:22220"]
+
+punchy:
+  punch: true
+  respond: true
+
+logging:
+  level: info
+  format: text
+
+# lab firewall: allow everything in both directions (default is deny-in)
+firewall:
+  inbound:
+    - port: any
+      proto: any
+      host: any
+  outbound:
+    - port: any
+      proto: any
+      host: any

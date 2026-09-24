@@ -1,0 +1,52 @@
+# host-a.yml — Nebula config for lab host-a (10.99.99.2)
+#
+# A regular node: knows the lighthouse's underlay address, learns
+# everyone else from the lighthouse.
+
+tun:
+  disabled: false
+  dev: nebula0
+  drop_local_broadcast: false
+  drop_multicast: false
+  tx_queue: 500
+  rx_queue: 500
+  mtu: 1300
+
+listen:
+  host: 0.0.0.0
+  port: 4242
+
+pki:
+  ca: /media/etc/nebula/ca.crt
+  cert: /media/etc/nebula/host-a.crt
+  key: /media/etc/nebula/host-a.key
+
+lighthouse:
+  am_lighthouse: false
+  interval: 10
+  # ask this lighthouse for the peer list (needed to learn host-b's underlay)
+  hosts:
+    - 10.99.99.1
+
+static_host_map:
+  # underlay address of the lighthouse (the QEMU UDP link, not the mesh IP)
+  10.99.99.1: ["192.168.100.1:22220"]
+
+punchy:
+  punch: true
+  respond: true
+
+logging:
+  level: info
+  format: text
+
+# lab firewall: allow everything in both directions (default is deny-in)
+firewall:
+  inbound:
+    - port: any
+      proto: any
+      host: any
+  outbound:
+    - port: any
+      proto: any
+      host: any

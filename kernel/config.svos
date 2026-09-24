@@ -17,6 +17,15 @@ CONFIG_BLK_DEV=y
 CONFIG_BLK_DEV_LOOP=y        # losetup for squashfs
 CONFIG_ISO9660_FS=y          # El Torito ISO boot
 CONFIG_RD_XZ=y
+
+# Stage 3: nebula lab (FAT disk carries nebula+certs into the guest)
+CONFIG_FAT_FS=y              # menu gate lives in fs/Kconfig (DOS/FAT)
+CONFIG_MSDOS_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_NLS_CODEPAGE_437=y    # vfat default codepage
+CONFIG_NLS_ISO8859_1=y       # vfat default iocharset
+CONFIG_TUN=y                 # nebula's tun/tap device (drivers/net)
+CONFIG_NET_CORE=y            # menu gate for TUN (allnoconfig kills it too)
 CONFIG_FUTEX=y               # musl threads/locks
 CONFIG_EPOLL=y               # event loops (nebula, later k3s)
 CONFIG_POSIX_TIMERS=y

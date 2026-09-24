@@ -1,0 +1,49 @@
+# lighthouse.yml — Nebula config for the lab lighthouse (10.99.99.1)
+#
+# A lighthouse is the mesh's phone book: nodes that live behind NATs /
+# firewalls tell it "here is where I am reachable", and it tells other
+# nodes. In a flat QEMU lab there is no NAT, but the lighthouse still
+# must exist — hosts need someone to ask for the peer list.
+
+tun:
+  disabled: false
+  dev: nebula0
+  drop_local_broadcast: false
+  drop_multicast: false
+  tx_queue: 500
+  rx_queue: 500
+  mtu: 1300
+
+listen:
+  host: 0.0.0.0
+  port: 22220
+
+pki:
+  ca: /media/etc/nebula/ca.crt
+  cert: /media/etc/nebula/lighthouse.crt
+  key: /media/etc/nebula/lighthouse.key
+
+lighthouse:
+  # this node IS the lighthouse
+  am_lighthouse: true
+  interval: 10
+
+# a lighthouse does not need static_host_map or a remotes list
+punchy:
+  punch: true
+  respond: true
+
+logging:
+  level: info
+  format: text
+
+# lab firewall: allow everything in both directions (default is deny-in)
+firewall:
+  inbound:
+    - port: any
+      proto: any
+      host: any
+  outbound:
+    - port: any
+      proto: any
+      host: any

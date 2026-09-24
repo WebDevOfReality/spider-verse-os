@@ -17,3 +17,6 @@ out/
 dossier/
 # built binaries
 init/svos-init
+
+# Nebula lab CA + certs — never commit (AGENTS.md: no secrets)
+web/lab/certs/
