@@ -1,0 +1,26 @@
+#!/bin/sh
+# populate <busybox-binary> <rootfs> — symlink the busybox applets into /bin.
+set -eu
+
+BB=$1
+ROOTFS=$2
+
+# busybox --list prints every applet it was built with
+mkdir -p "$ROOTFS/bin"
+"$BB" --list | while read -r applet; do
+	ln -sf busybox "$ROOTFS/bin/$applet"
+done
+# /sbin and /usr/bin symlinks for FHS-ish paths some applets assume
+mkdir -p "$ROOTFS/sbin" "$ROOTFS/usr/bin" "$ROOTFS/usr/sbin"
+for dir in sbin usr/bin usr/sbin; do
+	case "$dir" in
+		sbin)        prefix=/bin ;;
+		usr/bin)     prefix=/bin ;;
+		usr/sbin)    prefix=/bin ;;
+	esac
+	for applet in $("${BB}" --list-full | grep "^$dir/" || true); do
+		name=$(basename "$applet")
+		ln -sf "../..$prefix/busybox" "$ROOTFS/$dir/$name" 2>/dev/null || true
+	done
+done
+exit 0

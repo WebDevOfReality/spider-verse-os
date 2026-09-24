@@ -1,0 +1,28 @@
+#!/bin/sh
+# /init - PID 1 for the Weaver initramfs (Stage 1 skeleton).
+# Stage 2 replaces this with svos-init (C). Keep it honest and tiny.
+
+/bin/busybox mkdir -p /proc /sys /dev /tmp
+/bin/busybox mount -t proc none /proc
+/bin/busybox mount -t sysfs none /sys
+/bin/busybox mount -t devtmpfs none /dev
+# PID 1's stdio is not guaranteed to be the console (devtmpfs was not
+# mounted when the kernel opened it) — re-bind now that /dev exists
+exec </dev/console >/dev/console 2>&1
+
+echo
+echo '        .-"""-.        Spider-Verse OS'
+echo '       / _   _ \       ==========================='
+echo '      | (o) (o) |      Weaver initramfs (Stage 1)'
+echo '      |    ^    |'
+echo '       \  ---  /       kernel: our own build'
+echo '        `-----`        libc:   musl | userland: busybox'
+echo '      web-spinner'
+echo
+
+# PID 1 must never exit: respawn a shell on the console forever
+while :; do
+	setsid sh -c 'exec sh </dev/console >/dev/console 2>&1'
+	echo "init: shell exited, respawning"
+	sleep 1
+done

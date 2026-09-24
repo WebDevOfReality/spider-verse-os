@@ -21,3 +21,16 @@ jobs:
           printf '#include <stdio.h>\nint main(){puts("weaver");}\n' > /tmp/hello.c
           x86_64-svos-linux-musl-gcc -static -o /tmp/hello /tmp/hello.c
           file /tmp/hello | grep -q 'statically linked'
+
+  stage1-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make patch wget xz-utils bzip2 file bison flex cpio bc libelf-dev libssl-dev qemu-system-x86
+      - name: Build cross-toolchain (Stage 0)
+        run: ./toolchain/build.sh
+      - name: Build kernel + initramfs, boot in QEMU
+        run: ./kernel/build.sh

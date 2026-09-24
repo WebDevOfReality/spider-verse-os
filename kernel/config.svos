@@ -1,0 +1,62 @@
+# Weaver config fragment — applied on top of `make tinyconfig`.
+# tinyconfig is "minimal" by disabling whole *subsystems* (TTY, ELF exec,
+# futex, epoll...): anything gated behind a vanished option is silently
+# dropped by olddefconfig. So this fragment must (a) re-enable the syscall
+# layer musl/busybox require, then (b) add Weaver's hardware needs.
+# The settled result is committed as config-6.1.188-svos.
+
+# --- syscall layer: musl/busybox hard requirements (EXPERT-off in tiny) ---
+CONFIG_BINFMT_ELF=y          # or /init never execs
+CONFIG_BINFMT_SCRIPT=y       # #!/bin/sh support for /init
+CONFIG_FUTEX=y               # musl threads/locks
+CONFIG_EPOLL=y               # event loops (nebula, later k3s)
+CONFIG_POSIX_TIMERS=y
+CONFIG_TIMERFD=y
+CONFIG_SHMEM=y
+CONFIG_ADVISE_SYSCALLS=y
+CONFIG_MEMBARRIER=y
+CONFIG_TTY=y                 # serial console lives under TTY
+
+# --- console: 8250 UART on ttyS0 (QEMU -nographic) ---
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_PRINTK=y
+
+# --- 64-bit x86 baseline ---
+CONFIG_64BIT=y
+CONFIG_SMP=y
+
+# --- PCI + virtio: QEMU's virtual devices ---
+# VIRTIO_MENU is the menu gate for the drivers; without it set,
+# VIRTIO_PCI/BLK/NET are unreachable (allnoconfig answers menus "no")
+CONFIG_PCI=y
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_MENU=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_VIRTIO_NET=y
+
+# --- network stack: the Web of Reality substrate ---
+CONFIG_NET=y
+CONFIG_INET=y
+CONFIG_UNIX=y
+CONFIG_PACKET=y
+CONFIG_NETDEVICES=y
+
+# --- initramfs + boot basics ---
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_BLK_DEV=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_TMPFS=y
+
+# --- cgroups v2: k3s (Stage 5) requirement ---
+CONFIG_CGROUPS=y
+
+# --- pin intent: no modules, no swap, no debug bloat ---
+CONFIG_MODULES=n
+CONFIG_SWAP=n
+CONFIG_DEBUG_KERNEL=n
