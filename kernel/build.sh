@@ -167,6 +167,24 @@ if command -v mksquashfs >/dev/null 2>&1 && command -v qemu-img >/dev/null 2>&1;
 		tail -20 qemu-image.log
 		exit 1
 	}
+	# verify the ISO boots on its own (BIOS path, no -kernel help)
+	if [ -f "$OUT/weaver.iso" ]; then
+		{
+			sleep 15
+			echo 'echo ISO-BOOT-SHELL-OK'
+			sleep 2
+			echo 'poweroff -f'
+			sleep 5
+		} | timeout 90 qemu-system-x86_64 \
+			-m 512 \
+			-cdrom "$OUT/weaver.iso" \
+			-nographic -no-reboot > qemu-iso.log 2>&1 || true
+		grep -aq 'ISO-BOOT-SHELL-OK' qemu-iso.log && echo '==> PASS: ISO boots BIOS-only to shell' || {
+			echo '==> FAIL: ISO did not boot to shell' >&2
+			tail -20 qemu-iso.log
+			exit 1
+		}
+	fi
 else
 	echo "==> skipping disk artifact (mksquashfs/qemu-img missing on host)"
 fi

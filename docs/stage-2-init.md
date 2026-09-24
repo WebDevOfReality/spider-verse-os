@@ -20,6 +20,10 @@
   rootfs into an xz squashfs (`weaver-root.squashfs`) wrapped in a qcow2
   (`kernel/out/weaver.qcow2`), mounted read-only by the guest as
   `/dev/vda`.
+- **Stage 2d (ISO)** — `weaver.iso`: El Torito CD, BIOS-bootable
+  (SeaBIOS → ISOLINUX 6.04 → kernel → svos-init), isohybrid MBR so the
+  same file also boots from USB. Verified booting with plain
+  `-cdrom weaver.iso` — no `-kernel` help.
 
 ## Exit criterion — met
 
@@ -59,6 +63,12 @@ this in the `stage1-kernel` job).
 6. **losetup noise:** busybox `losetup` prints `Can't open blockdev`
    warnings that look fatal but aren't; squashfs mounts fine without it
    (it's only needed for file-backed loop devices, not whole-disk mounts).
+7. **ISO boot chain needs its whole family:** isolinux.bin alone is not
+   enough — syslinux 6.04 also requires `ldlinux.c32` next to it in the
+   ISO tree, or you get the terse `Failed to load ldlinux.c32`. And the
+   bootloader must be *copied into the tree xorriso packs* — the
+   `-b isolinux/isolinux.bin` option points at the file inside the image,
+   it does not fetch it from the host.
 
 ## Layout
 
@@ -75,11 +85,10 @@ kernel/out/weaver.qcow2 # the artifact (gitignored, CI rebuilds it)
 
 ## Honest caveats
 
-- The artifact boots via `-kernel` (QEMU direct boot). A real
-  bootloader-on-disk path (BIOS/UEFI, ISO El Torito) is next — needs
-  `xorriso`/`syslinux`/GRUB decisions, deferred deliberately.
-- No partition table yet: the qcow2 is a raw squashfs wrap. GPT +
-  bootloader arrive with the ISO work.
+- UEFI boot is still open: the ISO is BIOS-only (isolinux). GRUB
+  EFI/xorriso `-eltorito-alt-boot` work is deferred until it's needed.
+- No partition table on the qcow2 yet (raw squashfs wrap); GPT arrives
+  with real installer work.
 - `poweroff -f` from the shell doesn't run `rcK` yet (svos-init doesn't
   dispatch shutdown scripts — queued for Stage 2 polish or Stage 3).
 
