@@ -1,0 +1,14 @@
+# Build artifacts
+toolchain/out/
+kernel/out/
+init/out/
+web/out/
+apk/out/
+server/out/
+spiders/out/
+out/
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
