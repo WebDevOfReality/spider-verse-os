@@ -20,3 +20,6 @@ init/svos-init
 
 # Nebula lab CA + certs — never commit (AGENTS.md: no secrets)
 web/lab/certs/
+
+# apk signing key — never commit (AGENTS.md: no secrets)
+apk/svos-key.pem
