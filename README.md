@@ -92,8 +92,8 @@ This repo is built in public, so the receipts are public too.
 
 ## Status
 
-**Stage 0 in progress.** See `docs/learning-roadmap.md` for the reading list
-that accompanies each stage.
+**Stage 5 in progress.** One step from exit criterion (pod on a Weaver node);
+pickup notes in `dossier/worklog.md`. Stage notes: `docs/stage-*.md`.
 
 ## License
 
