@@ -75,12 +75,11 @@ carries over unchanged. Weaver stages 0–2 still ship as learning content.
 toolchain/    Stage 0 — musl-cross-make based cross-toolchain build
 kernel/       Stage 1 — kernel config + build scripts
 init/         Stage 2 — svos-init (PID 1), inittab, boot scripts
-web/          Stage 3 — nebula integration + svos-enroll
+web/          Stage 3 — nebula integration + lab VMs + k3s binary
 apk/          Stage 4 — apk-tools + extension repo
-server/       Stage 5 — k3s integration
-spiders/      Stage 6 — Spider-Monitor v0
-docs/         learning roadmap, stage notes
-scripts/      build + CI helpers
+scripts/      build + CI helpers (mkpkg.py, mkimage.sh)
+dossier/      Anthony's personal working notes (untracked)
+docs/         learning roadmap, stage notes, AI provenance
 ```
 
 ## Ethics (binding — see AGENTS.md)
