@@ -75,9 +75,10 @@ carries over unchanged. Weaver stages 0–2 still ship as learning content.
 toolchain/    Stage 0 — musl-cross-make based cross-toolchain build
 kernel/       Stage 1 — kernel config + build scripts
 init/         Stage 2 — svos-init (PID 1), inittab, boot scripts
-web/          Stage 3 — nebula integration + lab VMs + k3s binary
+web/          Stages 3+5 — nebula lab (runlab.sh), k3s lab (runk3s.sh), binaries
 apk/          Stage 4 — apk-tools + extension repo
-scripts/      build + CI helpers (mkpkg.py, mkimage.sh)
+scripts/      build + CI helpers (mkpkg.py, mkimage.sh, registry.py)
+registry/     pause image served to the k3s lab by scripts/registry.py
 dossier/      Anthony's personal working notes (untracked)
 docs/         learning roadmap, stage notes, AI provenance
 ```
@@ -91,8 +92,11 @@ This repo is built in public, so the receipts are public too.
 
 ## Status
 
-**Stage 5 in progress.** One step from exit criterion (pod on a Weaver node);
-pickup notes in `dossier/worklog.md`. Stage notes: `docs/stage-*.md`.
+**Stage 5 in progress.** A pod runs on a Weaver node (`spider-test`
+Running on `weaver-a`, reproducible with `web/runk3s.sh`). Still open for
+the stage's exit criterion: a 3-node cluster that is all Weaver (the server
+runs on the host today) and enroll auto-join. Stage notes:
+`docs/stage-*.md`.
 
 ## License
 
