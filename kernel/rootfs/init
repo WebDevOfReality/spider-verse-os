@@ -8,6 +8,31 @@
 # Why a shim instead of making /init the ELF itself? It keeps the entry
 # point debuggable (swap to busybox init for A/B testing by editing one
 # line) and lets us print which init is running before handing off.
+#
+# Why switch_root (Stage 5)? The initramfs is the kernel's special
+# "rootfs" mount, which can never be unmounted or pivoted away from.
+# Container runtimes jail each container with pivot_root(2), which fails
+# on it with EINVAL ("pivot_root .: invalid argument"). So we copy the
+# initramfs into an ordinary tmpfs and make THAT the root, like every
+# RAM-booting distro does. Nothing is mounted yet at this point
+# (svos-init mounts /proc /sys /dev /tmp later), so there is nothing to
+# carry across. switch_root then frees the old initramfs contents.
 
-/bin/busybox mkdir -p /proc /sys /dev /tmp /run /sbin
+/bin/busybox mkdir -p /proc /sys /dev /tmp /run /sbin /newroot
+
+# copy every top-level entry except /newroot itself (cp would recurse
+# into its own output); -a keeps modes, symlinks and device nodes
+copy_root() {
+	for d in /*; do
+		[ "$d" = /newroot ] && continue
+		/bin/busybox cp -a "$d" /newroot/ || return 1
+	done
+}
+
+/bin/busybox mount -t tmpfs -o mode=0755 tmpfs /newroot &&
+	copy_root &&
+	exec /bin/busybox switch_root /newroot /sbin/svos-init
+
+# fallback: anything above failed, boot from the initramfs as before
+echo "init: switch_root failed, staying on initramfs" >&2
 exec /sbin/svos-init
