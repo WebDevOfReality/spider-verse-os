@@ -4,16 +4,29 @@ on:
     branches: [main]
   pull_request:
 
+# The cross-toolchain takes ~10 min and downloads from GNU mirrors, so it
+# is built once and cached. The key is the hash of toolchain/build.sh: any
+# change to the recipe (versions, config) rebuilds from scratch. (Both
+# jobs spell the key out: workflow-level env can't call hashFiles.)
+
 jobs:
   stage0-toolchain:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Restore cross-toolchain cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: toolchain/out/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('toolchain/build.sh') }}
       - name: Install build deps
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc g++ make patch wget xz-utils bzip2 file bison flex
       - name: Build cross-toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
         run: ./toolchain/build.sh
       - name: Smoke test — hello world in QEMU-less mode
         run: |
@@ -23,6 +36,9 @@ jobs:
           file /tmp/hello | grep -q 'statically linked'
 
   stage1-kernel:
+    # reuse the toolchain stage0 built (and smoke-tested) instead of
+    # building it a second time
+    needs: stage0-toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +46,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc g++ make patch wget xz-utils bzip2 file bison flex cpio bc libelf-dev libssl-dev qemu-system-x86 squashfs-tools qemu-utils xorriso isolinux syslinux-common
-      - name: Build cross-toolchain (Stage 0)
-        run: ./toolchain/build.sh
+      - name: Restore cross-toolchain (Stage 0)
+        uses: actions/cache/restore@v4
+        with:
+          path: toolchain/out/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('toolchain/build.sh') }}
+          fail-on-cache-miss: true
       - name: Build kernel + svos-init + initramfs, boot in QEMU, build+verify disk artifact
         run: ./kernel/build.sh
