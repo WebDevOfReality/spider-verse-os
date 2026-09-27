@@ -33,6 +33,8 @@ REPO=$(cd "$HERE/.." && pwd)
 OUT=$REPO/kernel/out
 LAB=$HERE/lab
 CERTS=$LAB/certs
+# lab scratch (staging dirs); /tmp got wiped by tmpfiles cleanup mid-session
+SCRATCH=${SVOS_LAB:-$HOME/svos-lab}
 
 KERNEL=$OUT/linux-6.1.188/arch/x86/boot/bzImage
 ISO=$OUT/weaver.iso
@@ -44,7 +46,7 @@ ISO=$OUT/weaver.iso
 # guest can mount /media and run nebula from it (keeps the initramfs tiny)
 mknebuladisk() {
 	local name=$1
-	local tmp=/tmp/opencode/nebula-$name
+	local tmp=$SCRATCH/nebula-$name
 	rm -rf "$tmp"; mkdir -p "$tmp/etc/nebula"
 	cp "$LAB/$name.yml" "$tmp/etc/nebula/nebula.yml"
 	cp "$LAB/certs/ca.crt" "$tmp/etc/nebula/"
