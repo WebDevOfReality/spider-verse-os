@@ -12,10 +12,14 @@
 #
 # Endpoints containerd needs (pull path only):
 #   GET/HEAD /v2/                                   -> 200 (api version check)
-#   HEAD     /v2/<name>/manifests/<ref>             (digest, content-type)
-#   GET      /v2/<name>/manifests/<ref>
+#   GET/HEAD /v2/<name>/manifests/<tag|digest>
 #   GET/HEAD /v2/<name>/blobs/<digest>
-#   GET      /v2/<name>/blobs/uploads/<uuid>        (for HEAD-able blobs, rarely hit)
+#
+# Every object is addressed by the sha256 of its bytes, computed at startup,
+# and every response carries THAT digest in Docker-Content-Digest.
+# containerd trusts the header when it resolves a tag: if the tag's digest
+# names a different object, the next fetch comes back the wrong size
+# ("short read: expected 2261 bytes but got 0").
 #
 # Usage: python3 scripts/registry.py [port]   (default 5000, binds 127.0.0.1)
 #
@@ -26,7 +30,9 @@
 # (10.0.2.2 = slirp gateway = host). Agent restart picks it up.
 #
 # Provenance: drafted with AI assistance (GLM (glm-5.3-flash) by Z.ai);
-# digests verified against Docker Hub at fetch time.
+# digest handling rewritten with Claude (Opus 5.5) after the guest pull
+# failed on a mismatched Docker-Content-Digest. Digests verified against
+# Docker Hub at fetch time.
 import hashlib
 import http.server
 import json
@@ -36,34 +42,57 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 STORE = os.path.join(HERE, "..", "registry")
 
-MANIFEST_LIST = open(os.path.join(STORE, "pause-manifest.json"), "rb").read()
-MANIFEST_AMD = open(os.path.join(STORE, "pause-amd64.json"), "rb")
-CONFIG = open(os.path.join(STORE, "pause-config.json"), "rb").read()
-LAYER = open(os.path.join(STORE, "pause-layer.tar.gz"), "rb")
-
-AMD_DIGEST = "sha256:" + hashlib.sha256(
-    open(os.path.join(STORE, "pause-amd64.json"), "rb").read()
-).hexdigest()
-
 REPO = "rancher/mirrored-pause"
 TAG = "3.10.2"
+
+MANIFEST_LIST = "application/vnd.docker.distribution.manifest.list.v2+json"
+MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
+BLOB = "application/octet-stream"
+
+# file -> media type; the tag points at the manifest list
+FILES = {
+    "pause-manifest.json": MANIFEST_LIST,
+    "pause-amd64.json": MANIFEST,
+    "pause-config.json": BLOB,
+    "pause-layer.tar.gz": BLOB,
+}
+
+
+def load():
+    """Read every object once; index it by the sha256 of its bytes."""
+    objects = {}
+    for name, ctype in FILES.items():
+        body = open(os.path.join(STORE, name), "rb").read()
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        objects[digest] = (body, ctype)
+        if ctype == MANIFEST_LIST:
+            tag_digest = digest
+    return objects, tag_digest
+
+
+OBJECTS, TAG_DIGEST = load()
 
 
 class Registry(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def _send(self, body, ctype, code=200):
+    def _send(self, body, ctype, digest=None, code=200, head_only=False):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Docker-Content-Digest", AMD_DIGEST)
+        self.send_header("Docker-Distribution-API-Version", "registry/2.0")
+        if digest:
+            self.send_header("Docker-Content-Digest", digest)
         self.end_headers()
-        self.wfile.write(body)
+        # HEAD gets headers only: stray body bytes on a keep-alive
+        # connection would be read as the start of the next response
+        if not head_only:
+            self.wfile.write(body)
 
-    def _not_found(self):
-        err = json.dumps({"errors": [{"code": "MANIFEST_UNKNOWN",
+    def _not_found(self, code_name, head_only):
+        err = json.dumps({"errors": [{"code": code_name,
                                       "message": "not found"}]}).encode()
-        self._send(err, "application/json", 404)
+        self._send(err, "application/json", code=404, head_only=head_only)
 
     def do_HEAD(self):
         self.do_GET(head_only=True)
@@ -71,54 +100,40 @@ class Registry(http.server.BaseHTTPRequestHandler):
     def do_GET(self, head_only=False):
         path = self.path.split("?")[0]
         if path == "/v2/":
-            self._send(b"{}", "application/json")
+            self._send(b"{}", "application/json", head_only=head_only)
             return
 
-        if not path.startswith("/v2/"):
-            self._not_found()
+        # /v2/<repo>/(manifests|blobs)/<ref>; the repo name contains a slash
+        prefix = "/v2/" + REPO + "/"
+        if not path.startswith(prefix):
+            self._not_found("NAME_UNKNOWN", head_only)
             return
+        kind, _, ref = path[len(prefix):].partition("/")
 
-        parts = path.split("/")
-        parts = path.split("/")
-        # /v2/rancher/mirrored-pause/manifests/<ref> -> 6 parts (repo has a slash)
-        if len(parts) == 6 and parts[1] == "v2" and parts[2] == "rancher" and parts[3] == "mirrored-pause" and parts[4] == "manifests":
-            ref = parts[5]
-            if ref == TAG:
-                self._send(open(os.path.join(STORE, "pause-manifest.json"), "rb").read(),
-                           "application/vnd.docker.distribution.manifest.list.v2+json")
-            elif ref == AMD_DIGEST or ref.startswith("sha256:412c"):
-                body = MANIFEST_AMD.read()
-                MANIFEST_AMD.seek(0)
-                self._send(body, "application/vnd.docker.distribution.manifest.v2+json")
+        if kind == "manifests":
+            digest = TAG_DIGEST if ref == TAG else ref
+            obj = OBJECTS.get(digest)
+            if obj and obj[1] in (MANIFEST_LIST, MANIFEST):
+                self._send(obj[0], obj[1], digest, head_only=head_only)
             else:
-                self._not_found()
+                self._not_found("MANIFEST_UNKNOWN", head_only)
             return
 
-        # /v2/rancher/mirrored-pause/blobs/<digest> -> 6 parts
-        if len(parts) == 6 and parts[1] == "v2" and parts[2] == "rancher" and parts[3] == "mirrored-pause" and parts[4] == "blobs":
-            digest = parts[5]
-            if "4a83b15d" in digest:
-                self._send(open(os.path.join(STORE, "pause-config.json"), "rb").read(),
-                           "application/octet-stream")
-            elif "81ede362" in digest:
-                body = open(os.path.join(STORE, "pause-layer.tar.gz"), "rb").read()
-                ctype = "application/octet-stream"
-                if head_only:
-                    self.send_response(200)
-                    self.send_header("Content-Length", str(len(body)))
-                    self.send_header("Docker-Content-Digest", digest)
-                    self.end_headers()
-                    return
-                self._send(body, ctype)
+        if kind == "blobs":
+            obj = OBJECTS.get(ref)
+            if obj:
+                self._send(obj[0], BLOB, ref, head_only=head_only)
             else:
-                self._not_found()
+                self._not_found("BLOB_UNKNOWN", head_only)
             return
 
-        self._not_found()
+        self._not_found("UNSUPPORTED", head_only)
 
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), Registry)
-    print(f"registry serving {REPO}:{TAG} on 127.0.0.1:{port}")
+    print(f"registry serving {REPO}:{TAG} ({TAG_DIGEST}) on 127.0.0.1:{port}")
+    for digest, (body, ctype) in OBJECTS.items():
+        print(f"  {digest}  {len(body):>7}  {ctype}")
     srv.serve_forever()
