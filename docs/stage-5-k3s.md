@@ -149,10 +149,12 @@ with its lesson:
     `/init` now does that (falling back to the old path if it fails).
 15. **The CI failures weren't ours.** Every red run since Sep 23 was
     musl-cross-make downloading `config.sub` from savannah's gitweb, which
-    502s intermittently. `toolchain/build.sh` now fetches the same pinned
-    revision from savannah's cgit (verified with musl-cross-make's own
-    sha1) and retries 5xx on the tarballs; CI builds the toolchain once
-    and caches it.
+    502s intermittently. Switching to savannah's cgit URL passed once,
+    then timed out on the next run — the whole host is unreliable from CI.
+    So the pinned revision now lives in the repo (`toolchain/config.sub`,
+    checked against musl-cross-make's own sha1) and the build never goes
+    to savannah. The GNU tarballs retry on 5xx, and CI builds the
+    toolchain once and caches it.
 
 ## Next steps
 

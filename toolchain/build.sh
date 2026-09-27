@@ -36,18 +36,17 @@ OUTPUT = ${OUTPUT}/toolchain
 DL_CMD = wget --tries=5 --waitretry=10 --retry-on-http-error=502,503,504 -c -O
 EOF
 
-# config.sub: musl-cross-make fetches it from savannah's old gitweb URL,
-# which 502s intermittently (CI failed on it repeatedly). Fetch the same
-# pinned revision from savannah's cgit instead, verified against
-# musl-cross-make's own hash, so make finds it already in sources/.
+# config.sub: musl-cross-make downloads it from git.savannah.gnu.org,
+# which is unreliable from CI (gitweb 502s; cgit timed out too). We carry
+# the pinned revision in toolchain/config.sub (a 36K GPLv3+exception
+# script, header intact) and check it against musl-cross-make's own sha1,
+# so make finds it already in sources/ and never goes to savannah.
 CONFIG_SUB_REV=$(sed -n 's/^CONFIG_SUB_REV = //p' Makefile)
 if [ ! -f sources/config.sub ]; then
-	echo "==> fetching config.sub ${CONFIG_SUB_REV} (cgit)"
+	echo "==> config.sub ${CONFIG_SUB_REV} (vendored in toolchain/)"
 	rm -rf sources/config.sub.tmp
 	mkdir -p sources/config.sub.tmp
-	wget -q --tries=5 --waitretry=10 --retry-on-http-error=502,503,504 \
-		-O sources/config.sub.tmp/config.sub \
-		"https://git.savannah.gnu.org/cgit/config.git/plain/config.sub?id=${CONFIG_SUB_REV}"
+	cp "$HERE/config.sub" sources/config.sub.tmp/config.sub
 	(cd sources/config.sub.tmp && sha1sum -c "../../hashes/config.sub.${CONFIG_SUB_REV}.sha1")
 	mv sources/config.sub.tmp/config.sub sources/config.sub
 	rm -rf sources/config.sub.tmp
