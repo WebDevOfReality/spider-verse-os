@@ -1,0 +1,12 @@
+# Stage 5 exit criterion: this pod Running on a Weaver node.
+# The pause image is the only one our local registry serves; it just
+# sleeps forever, which is all "Running" needs.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spider-test
+spec:
+  nodeName: weaver-a
+  containers:
+    - name: pause
+      image: rancher/mirrored-pause:3.10.2
