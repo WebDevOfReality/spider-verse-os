@@ -1,0 +1,7 @@
+# containerd mirror config for the Weaver agent (Stage 5).
+# Copied to /etc/rancher/k3s/registries.yaml by agent.sh: docker.io
+# pulls go to scripts/registry.py on the host (10.0.2.2 via slirp).
+mirrors:
+  docker.io:
+    endpoint:
+      - "http://10.0.2.2:5000"

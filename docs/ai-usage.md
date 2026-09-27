@@ -1,8 +1,12 @@
 # AI Usage & Provenance
 
 This project is built in public with AI as the assumed default for code —
-every non-trivial commit carries a `Co-authored-by: GLM (glm-5.3-flash) by
-Z.ai <noreply@z.ai>` trailer, and the receipts are documented per stage.
+every non-trivial AI-assisted commit carries a `Co-authored-by:` trailer
+naming the model that did the work, and the receipts are documented per
+stage. Stages 0–4 and the start of Stage 5 used GLM (glm-5.3-flash) by
+Z.ai; the Stage 5 session of 2026-09-26/27 used Claude Opus 5.5
+(`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`). Human-only
+changes (e.g. the Stage 5 BPF kernel options) carry no trailer.
 
 ## What AI did / didn't do
 
@@ -12,6 +16,7 @@ Z.ai <noreply@z.ai>` trailer, and the receipts are documented per stage.
 | svos-init (C PID 1) | drafted | reviewed line-by-line (on request) |
 | Nebula lab configs + topology | drafted | decided topology, hit the failures |
 | apk repo format | reverse-engineered w/ AI | verified against real Alpine pkgs |
+| Stage 5 lab, registry fix, `/init` switch_root, CI fix | drafted, debugged, explained | set direction, wrote the BPF config change, approved each push |
 | Hand-made boot banner (ASCII art) | **never** | **always** (AGENTS.md §2) |
 | Architecture + roadmap decisions | never | always (Anthony's) |
 
@@ -24,7 +29,7 @@ Z.ai <noreply@z.ai>` trailer, and the receipts are documented per stage.
 | 2 | docs/stage-2-init.md | silent mount failures = no console; menu gates (MISC_FILESYSTEMS); isolinux + ldlinux.c32 |
 | 3 | docs/stage-3-web.md | socket netdev = 1:1 pipe; nebula denies inbound; TUN needs NET_CORE gate (strike 3) |
 | 4 | docs/stage-4-apk.md | apk v2 = 3 gzip members; pkg-config shim; datahash covers payload |
-| 5 | (in progress; notes in dossier/worklog.md) | k3s kernel reqs; slirp for VM→host; serial console under load is unreliable |
+| 5 | docs/stage-5-k3s.md (pod Running; 3-node bar open) | k3s kernel reqs; slirp for VM→host; registry digests; cgroup v2 devices = eBPF; no pivot_root out of initramfs |
 
 ## Working diary
 

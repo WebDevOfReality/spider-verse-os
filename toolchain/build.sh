@@ -28,10 +28,29 @@ cd musl-cross-make
 
 # Pin the toolchain components: TARGET, and musl/gcc/binutils sources.
 # musl-cross-make fetches and verifies hashes itself at build time.
+# DL_CMD: retry transient server errors instead of failing the build
+# (mirrors 502 now and then; -c resumes a partial download).
 cat > config.mak <<EOF
 TARGET = ${TARGET}
 OUTPUT = ${OUTPUT}/toolchain
+DL_CMD = wget --tries=5 --waitretry=10 --retry-on-http-error=502,503,504 -c -O
 EOF
+
+# config.sub: musl-cross-make downloads it from git.savannah.gnu.org,
+# which is unreliable from CI (gitweb 502s; cgit timed out too). We carry
+# the pinned revision in toolchain/config.sub (a 36K GPLv3+exception
+# script, header intact) and check it against musl-cross-make's own sha1,
+# so make finds it already in sources/ and never goes to savannah.
+CONFIG_SUB_REV=$(sed -n 's/^CONFIG_SUB_REV = //p' Makefile)
+if [ ! -f sources/config.sub ]; then
+	echo "==> config.sub ${CONFIG_SUB_REV} (vendored in toolchain/)"
+	rm -rf sources/config.sub.tmp
+	mkdir -p sources/config.sub.tmp
+	cp "$HERE/config.sub" sources/config.sub.tmp/config.sub
+	(cd sources/config.sub.tmp && sha1sum -c "../../hashes/config.sub.${CONFIG_SUB_REV}.sha1")
+	mv sources/config.sub.tmp/config.sub sources/config.sub
+	rm -rf sources/config.sub.tmp
+fi
 
 echo "==> building (this takes a while; go make tea)"
 make -j"$(nproc)" install
