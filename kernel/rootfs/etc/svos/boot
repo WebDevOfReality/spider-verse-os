@@ -1,0 +1,85 @@
+#!/bin/sh
+# /etc/svos/boot — run once by svos-init (PID 1) before the console shell.
+#
+# PID 1 is mechanism; this is policy. What this node does is decided by
+# the kernel command line (non-secret identity) plus files on the attached
+# FAT disk (binaries and secrets):
+#
+#   svos.role=agent        what to run (no svos.role: plain shell, as before)
+#   svos.name=weaver-b     hostname = k3s node name
+#   svos.server=10.0.2.2   k3s server address
+#   svos.ip=10.0.2.15/24   this node's address   (default: slirp's guest IP)
+#   svos.gw=10.0.2.2       default gateway       (default: slirp's host)
+#   svos.dns=10.0.2.3      nameserver            (default: slirp's DNS)
+#
+#   /dev/vda (FAT) -> /media: k3s, token, registries.yaml (optional)
+#
+# The token is read from the disk, never the cmdline: /proc/cmdline is
+# readable by every process on the machine.
+#
+# Must return: long-running work goes to the background. A non-zero exit
+# is logged by svos-init and the boot carries on to a shell.
+
+ROLE= NAME= SERVER=
+IP=10.0.2.15/24 GW=10.0.2.2 DNS=10.0.2.3
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+		svos.role=*)   ROLE=${arg#*=} ;;
+		svos.name=*)   NAME=${arg#*=} ;;
+		svos.server=*) SERVER=${arg#*=} ;;
+		svos.ip=*)     IP=${arg#*=} ;;
+		svos.gw=*)     GW=${arg#*=} ;;
+		svos.dns=*)    DNS=${arg#*=} ;;
+	esac
+done
+
+[ -n "$ROLE" ] || exit 0
+
+log() { echo "svos-boot: $*"; }
+die() { log "$*"; exit 1; }
+
+case "$ROLE" in
+	agent) ;;
+	*) die "unknown svos.role '$ROLE' (only 'agent' so far)" ;;
+esac
+[ -n "$NAME" ] || die "svos.role=$ROLE needs svos.name"
+[ -n "$SERVER" ] || die "svos.role=$ROLE needs svos.server"
+
+# ---- the disk: binaries + secrets ----
+mkdir -p /media
+mountpoint -q /media || mount -t vfat -o ro /dev/vda /media ||
+	die "no FAT disk on /dev/vda (k3s + token live there)"
+[ -x /media/k3s ] || die "/media/k3s missing"
+[ -f /media/token ] || die "/media/token missing"
+
+# ---- network (slirp defaults; override per node on the cmdline) ----
+ip link set lo up
+ip link set eth0 up
+ip addr add "$IP" dev eth0
+ip route add default via "$GW"
+
+# ---- files a minimal root lacks (Stage 5 lessons in parentheses) ----
+echo 'root:x:0:0:root:/:/bin/sh' > /etc/passwd   # kubelet mappings (4)
+echo 'root:x:0:' > /etc/group
+echo "nameserver $DNS" > /etc/resolv.conf
+# containerd copies /etc/hosts into every pod sandbox (12)
+printf '127.0.0.1 localhost\n%s %s\n' "${IP%/*}" "$NAME" > /etc/hosts
+hostname "$NAME"                                  # the node name (7, 9)
+
+# ---- mounts kubelet and containerd need ----
+mkdir -p /sys/fs/cgroup /run /var/lib/rancher /var/lib/kubelet /var/log \
+	/etc/rancher/k3s /etc/cni /opt/cni /var/cache/misc
+mountpoint -q /sys/fs/cgroup || mount -t cgroup2 none /sys/fs/cgroup
+# kubelet needs a real mounted fs here (5)
+mountpoint -q /var/lib/kubelet || mount -t tmpfs none /var/lib/kubelet
+
+# pull through the host's local registry when the disk says so
+[ -f /media/registries.yaml ] && cp /media/registries.yaml /etc/rancher/k3s/
+
+# ---- start k3s; its output goes to a file, never the console (8) ----
+log "starting k3s agent as $NAME -> https://$SERVER:6443"
+/media/k3s agent --server "https://$SERVER:6443" \
+	--token-file /media/token --node-ip "${IP%/*}" \
+	> /var/log/k3s-agent.log 2>&1 &
+log "k3s agent started (log: /var/log/k3s-agent.log)"
+exit 0
