@@ -3,21 +3,24 @@
 > **Provenance note:** drafted with AI assistance
 > (GLM (glm-5.3-flash) by Z.ai) from Anthony's hands-on session, 2026-09-25/26;
 > updated with AI assistance (Claude Opus 5.5) after the 2026-09-26/27
-> session that got the pod Running, and after the 2026-09-28 auto-join
-> work. Working diary: `dossier/worklog.md`.
+> session that got the pod Running, after the 2026-09-28 auto-join
+> work, and after the 2026-10-01 server-on-Weaver work. Working diary:
+> `dossier/worklog.md`.
 
 ## Status
 
-**A pod runs on a Weaver node.** `spider-test` reaches `1/1 Running` on
-`weaver-a` (our kernel, svos-init, musl/busybox) as a k3s v1.37.0+k3s1
-agent, joined to a k3s server on the host. Reproducible with
-`web/runk3s.sh` (below), verified end to end on a fresh VM. **The node
-joins by itself at boot** — nobody types at its console (2026-09-28).
+**The cluster is all Weaver.** The k3s v1.37.0+k3s1 server runs in a
+Weaver VM (`earth-616`, 2026-10-01), and `spider-test` reaches
+`1/1 Running` on the Weaver agent `weaver-a` (our kernel, svos-init,
+musl/busybox). The VMs talk over a shared QEMU network, not through the
+host. **Nodes join by themselves at boot** — nobody types at a console
+(2026-09-28). No sudo: k3s runs as root inside the VMs. Reproducible with
+`web/runk3s.sh` (below).
 
-The README's stage table sets a bigger bar for Stage 5 — **3-node QEMU
+The README's stage table sets the bar for Stage 5 — **3-node QEMU
 cluster, all Weaver, enroll auto-join** — and that is **not met yet**:
-the server runs on the host, there is one Weaver node, and the join uses a
-fixed lab token rather than `svos-enroll`. See "Exit criterion".
+there is one agent node, and the join uses a fixed lab token rather than
+`svos-enroll`. See "Exit criterion".
 
 ## What ships
 
@@ -41,24 +44,50 @@ fixed lab token rather than `svos-enroll`. See "Exit criterion".
   `/etc/svos/boot` once before the console shell, and now respawns the
   shell only when the shell itself dies (lesson 16).
 - **`/etc/svos/boot`** (`kernel/rootfs/etc/svos/boot`) — reads the node's
-  role from the kernel command line and starts the k3s agent.
+  role from the kernel command line and starts the k3s server or agent.
+- **CONFIG_EXT4_FS** — the server's persistent datastore volume
+  (`svos.data=disk`).
 - **`web/runk3s.sh`** — the lab, reproducible (next section).
 
 ## Running the lab
 
 ```
-./web/runk3s.sh server          # terminal 1: k3s server on the host (sudo)
+./web/runk3s.sh server          # terminal 1: boot earth-616, the control plane
 ./web/runk3s.sh registry        # terminal 2: registry on :5000
 ./web/runk3s.sh agent [node]    # terminal 3: boot weaver-a; it joins by itself
 ./web/runk3s.sh test            # create spider-test, wait for Running
+./web/runk3s.sh kubectl ...     # kubectl against the server VM
 ```
 
-Topology: the **server runs on the host** (`--disable-agent`,
-`--advertise-address 10.0.2.2 --tls-san 10.0.2.2`, data under
-`~/svos-lab`, packaged add-ons disabled). **weaver-a** has one NIC on
-**slirp** (`-netdev user`): the guest is 10.0.2.15, the host is 10.0.2.2,
-DNS is 10.0.2.3. The Nebula mesh isn't part of this lab; it runs
+Topology — every VM has two NICs (lesson 18):
+
+```
+earth-616 (server)      weaver-a (agent)      weaver-b, weaver-c
+eth1 192.168.76.10      eth1 192.168.76.11    eth1 .12, .13
+  +-----------------------+---------------------+---- cluster LAN
+                QEMU multicast 230.0.76.1:7676 (VM<->VM)
+eth0: slirp, a private copy per VM (guest 10.0.2.15, host 10.0.2.2)
+  server: host 127.0.0.1:6443 -> guest :6443 (kubectl from the host)
+  agents: pull from registry.py on the host at 10.0.2.2:5000
+```
+
+The server runs `--disable-agent` (control plane only), advertises
+192.168.76.10, and has the packaged add-ons disabled. It copies its admin
+kubeconfig onto its FAT disk; `runk3s.sh` reads it from there into
+`~/svos-lab/kubeconfig.yaml` before every kubectl call. The kubeconfig
+names `https://127.0.0.1:6443`, which slirp forwards into the VM, so it
+works unchanged. The Nebula mesh isn't part of this lab; it runs
 separately with `web/runlab.sh` (Stage 3).
+
+Where the server keeps its state is your choice:
+
+- **tmpfs** (default): a fresh cluster on every server boot — new CA,
+  new kubeconfig. Reboot the agents after rebooting the server.
+- **`SVOS_DATA=disk ./web/runk3s.sh server`**: an ext4 volume
+  (`~/svos-lab/earth-616.data.ext4`, created on first use) on
+  `/dev/vdb`, mounted at `/var/lib/rancher`. The cluster survives server
+  reboots — **if the server is shut down cleanly**: type `poweroff -f`
+  (or at least `sync`) on its console, never just kill QEMU (lesson 19).
 
 `agent` resets the node's stale server-side state first (lesson 9) when
 the server is up, so re-booting a node is just running `agent` again.
@@ -69,13 +98,15 @@ Identity goes on the **kernel command line**; binaries and secrets go on
 the **disk**:
 
 ```
--append "... svos.role=agent svos.name=weaver-a svos.server=10.0.2.2"
+-append "... svos.role=agent svos.name=weaver-a svos.lan=192.168.76.11/24
+            svos.server=192.168.76.10"
 /dev/vda (FAT, mounted read-only at /media): k3s, token, registries.yaml
 ```
 
 The token stays off the command line because `/proc/cmdline` is readable
-by every process. `svos.ip`, `svos.gw` and `svos.dns` override the slirp
-defaults per node.
+by every process. `svos.lan` puts the node on the cluster LAN (`eth1`),
+and that address becomes its k3s node IP. `svos.ip`, `svos.gw` and
+`svos.dns` override the slirp defaults for `eth0`.
 
 svos-init runs `/etc/svos/boot` once and waits for it; with no
 `svos.role` it exits at once and the machine boots to a plain shell as
@@ -83,15 +114,30 @@ before (the smoke tests boot this way). With `svos.role=agent` it does,
 in order, each step tied to its lesson:
 
 1. mount the disk; require `/media/k3s` and `/media/token`
-2. network: `lo` up, `eth0` = `svos.ip`, default route via `svos.gw`
+2. network: `lo` up, `eth0` = `svos.ip`, default route via `svos.gw`;
+   `eth1` = `svos.lan` if set
 3. `/etc/passwd` + `/etc/group` (lesson 4)
 4. `/etc/resolv.conf` → `svos.dns`
 5. `/etc/hosts` (lesson 12)
 6. `hostname` = `svos.name` (lessons 7, 9)
 7. mount cgroup2 on `/sys/fs/cgroup`; tmpfs on `/var/lib/kubelet` (lesson 5)
 8. `/etc/rancher/k3s/registries.yaml` from the disk, if present
-9. `k3s agent --server https://$svos.server:6443 --token-file /media/token`
-   in the background, logging to `/var/log/k3s-agent.log` (lesson 8)
+9. `k3s agent --server https://$svos.server:6443 --token-file /media/token
+   --node-ip <svos.lan> --flannel-iface eth1` in the background, logging
+   to `/var/log/k3s-agent.log` (lesson 8). Flannel's VXLAN must use
+   `eth1` too, or pod traffic between nodes would head for slirp.
+
+With `svos.role=server` steps 1–6 are the same (the disk is mounted
+read-write), then:
+
+- `svos.data=disk`: mount ext4 `/dev/vdb` on `/var/lib/rancher`;
+  `svos.data=tmpfs` (default): nothing to do — the root is already a
+  tmpfs (lesson 14)
+- `k3s server --disable-agent --token-file /media/token
+  --advertise-address <svos.lan> --tls-san <svos.lan>` with the add-ons
+  disabled, logging to `/var/log/k3s-server.log`
+- in the background, wait for `/etc/rancher/k3s/k3s.yaml`, copy it to
+  `/media/k3s.yaml` and `sync`, so the host can read it off the disk
 
 A failing boot script is logged (`svos-init: /etc/svos/boot failed
 (exit 1)`) and the boot carries on to a shell to debug from. The script
@@ -105,7 +151,8 @@ must return: a hang would keep the console shell from ever starting
 | `kubectl get nodes` → Weaver node `Ready` | **Met** |
 | `kubectl get pod spider-test` → `Running` on a Weaver node | **Met** (2026-09-27) |
 | Node joins at boot, nobody at the console | **Met** (2026-09-28) — `Ready` ~10 s after `runk3s.sh agent` |
-| README: 3-node QEMU cluster, all Weaver | Not met — server is on the host, 1 Weaver node |
+| k3s server on Weaver | **Met** (2026-10-01) — `earth-616`, tmpfs or ext4 datastore |
+| README: 3-node QEMU cluster, all Weaver | Partly — all Weaver, VMs on a shared LAN; 1 agent node so far |
 | README: enroll auto-join | Partly — auto-join works with a fixed lab token; `svos-enroll` (certs, per-node tokens) not yet |
 
 ## What we learned (the receipts)
@@ -202,21 +249,53 @@ must return: a hang would keep the console shell from ever starting
     an edited `/init` silently didn't ship until the staged copy was
     deleted by hand. Busybox stays cached; our files are refreshed on
     every build.
+18. **A VM cluster needs two networks.** With the server on the host,
+    slirp was enough: every VM reached it at 10.0.2.2. With the server in
+    a VM it isn't — each VM gets its *own* private slirp (every guest is
+    10.0.2.15), so VMs can't see each other. A QEMU socket netdev in
+    multicast mode (`-netdev socket,mcast=230.0.76.1:7676,localaddr=127.0.0.1`)
+    is a shared Ethernet segment for any number of VMs on one machine —
+    but it has no host on it (lesson 2). So each VM gets both: `eth0` on
+    slirp for the host (registry, DNS) and `eth1` on the segment for the
+    cluster. Two details: every VM on the segment needs its own MAC
+    (QEMU's default is the same for all of them), and k3s must be told
+    which side is the cluster — `--node-ip` and `--flannel-iface eth1` on
+    agents, `--advertise-address` on the server, or each node offers its
+    slirp address, 10.0.2.15, the same for all of them.
+19. **Killing QEMU is pulling the power cord.** With the datastore on
+    ext4, a server killed a minute after `weaver-a` joined came back
+    without the node or its pod — but with the volume, `state.db` and its
+    certificates intact. Nothing deleted the node: the writes never left
+    the guest's page cache. k3s's sqlite runs in WAL mode, which doesn't
+    `fsync` each commit, and Linux writes dirty pages back on its own
+    clock (up to ~30 s). The same steps with `sync` typed on the server
+    console before the kill kept both. A persistent server has to shut
+    down cleanly: `poweroff -f` (busybox syncs first; `-n` would skip
+    it). svos-init has no clean shutdown of its own yet.
 
 ## Next steps
 
 Toward the README's Stage 5 bar:
 
-1. **Server on Weaver** — run `k3s server` in a Weaver VM instead of on
-   the host, so the cluster is all Weaver (a `svos.role=server` branch in
-   `/etc/svos/boot`).
-2. **Three nodes** — two more agents; this is where the VM↔VM network
-   matters again (Nebula, or a shared QEMU network). `svos.ip`/`svos.gw`
-   already let each node take its own address.
+1. ~~**Server on Weaver**~~ — done (2026-10-01).
+2. **Three nodes** — two more agents. The shared LAN, per-node
+   addresses and MACs are in place (`weaver-b` .12, `weaver-c` .13);
+   what's left is booting them together and checking pod traffic
+   between nodes (flannel VXLAN over `eth1`).
 3. **`svos-enroll`** — per-node join credentials instead of the fixed
    lab token on the disk.
 
+Features:
+
+- **server + node** (`TODO(feature)` in `/etc/svos/boot`): a server
+  without `--disable-agent` also runs kubelet and counts as a node. The
+  server is control plane only for now (Anthony's call, 2026-10-01).
+
 Polish:
+
+- clean shutdown in svos-init: on SIGTERM/SIGUSR2 (busybox `reboot` /
+  `poweroff` without `-f`), stop children, `sync`, then `reboot(2)` —
+  so a persistent server can't lose writes (lesson 19)
 
 - an `alarm()` timeout around the boot script in svos-init, so a hung
   script can't keep the console shell from starting
@@ -235,5 +314,8 @@ Polish:
   servicelb) are disabled: our registry doesn't serve their images.
 - The join token is a fixed lab value (`svos-stage5`) written onto every
   node's disk; `svos-enroll` is meant to replace it.
-- The k3s agent isn't supervised: if it dies, nothing restarts it.
+- k3s (server and agent) isn't supervised: if it dies, nothing restarts it.
+- A disk-backed server must be powered off from its console
+  (`poweroff -f`); killing QEMU can lose the last ~30 s of cluster
+  writes (lesson 19).
 - `apk add` still carries `--allow-untrusted` (pubkey embedding pending).
