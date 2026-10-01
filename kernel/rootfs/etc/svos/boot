@@ -3,16 +3,23 @@
 #
 # PID 1 is mechanism; this is policy. What this node does is decided by
 # the kernel command line (non-secret identity) plus files on the attached
-# FAT disk (binaries and secrets):
+# disks (binaries and secrets):
 #
-#   svos.role=agent        what to run (no svos.role: plain shell, as before)
-#   svos.name=weaver-b     hostname = k3s node name
-#   svos.server=10.0.2.2   k3s server address
-#   svos.ip=10.0.2.15/24   this node's address   (default: slirp's guest IP)
-#   svos.gw=10.0.2.2       default gateway       (default: slirp's host)
-#   svos.dns=10.0.2.3      nameserver            (default: slirp's DNS)
+#   svos.role=agent|server   what to run (no svos.role: plain shell, as before)
+#   svos.name=weaver-b       hostname = k3s node name
+#   svos.server=192.168.76.10  k3s server address (agents only)
+#   svos.lan=192.168.76.11/24  cluster address on eth1, the VM<->VM segment
+#   svos.data=tmpfs|disk     where k3s keeps its state (default tmpfs)
+#   svos.ip=10.0.2.15/24     eth0 address          (default: slirp's guest IP)
+#   svos.gw=10.0.2.2         default gateway       (default: slirp's host)
+#   svos.dns=10.0.2.3        nameserver            (default: slirp's DNS)
 #
-#   /dev/vda (FAT) -> /media: k3s, token, registries.yaml (optional)
+#   /dev/vda (FAT)  -> /media: k3s, token, registries.yaml (optional)
+#   /dev/vdb (ext4) -> /var/lib/rancher, only with svos.data=disk
+#
+# Two NICs: eth0 is slirp (the host: registry, DNS, default route), eth1
+# is the shared segment the VMs talk to each other on (lesson 18). The
+# node's cluster identity (--node-ip, flannel) is the eth1 address.
 #
 # The token is read from the disk, never the cmdline: /proc/cmdline is
 # readable by every process on the machine.
@@ -20,13 +27,15 @@
 # Must return: long-running work goes to the background. A non-zero exit
 # is logged by svos-init and the boot carries on to a shell.
 
-ROLE= NAME= SERVER=
+ROLE= NAME= SERVER= LAN= DATA=tmpfs
 IP=10.0.2.15/24 GW=10.0.2.2 DNS=10.0.2.3
 for arg in $(cat /proc/cmdline); do
 	case "$arg" in
 		svos.role=*)   ROLE=${arg#*=} ;;
 		svos.name=*)   NAME=${arg#*=} ;;
 		svos.server=*) SERVER=${arg#*=} ;;
+		svos.lan=*)    LAN=${arg#*=} ;;
+		svos.data=*)   DATA=${arg#*=} ;;
 		svos.ip=*)     IP=${arg#*=} ;;
 		svos.gw=*)     GW=${arg#*=} ;;
 		svos.dns=*)    DNS=${arg#*=} ;;
@@ -38,16 +47,25 @@ done
 log() { echo "svos-boot: $*"; }
 die() { log "$*"; exit 1; }
 
+# TODO(feature): server+node — a server without --disable-agent also runs
+# kubelet and counts as a node. Control plane only for now (Anthony's call).
 case "$ROLE" in
-	agent) ;;
-	*) die "unknown svos.role '$ROLE' (only 'agent' so far)" ;;
+	agent)  [ -n "$SERVER" ] || die "svos.role=agent needs svos.server" ;;
+	server) ;;
+	*) die "unknown svos.role '$ROLE' (agent or server)" ;;
 esac
 [ -n "$NAME" ] || die "svos.role=$ROLE needs svos.name"
-[ -n "$SERVER" ] || die "svos.role=$ROLE needs svos.server"
+case "$DATA" in
+	tmpfs|disk) ;;
+	*) die "unknown svos.data '$DATA' (tmpfs or disk)" ;;
+esac
 
 # ---- the disk: binaries + secrets ----
+# the server writes its kubeconfig back here for the host, so it gets rw
+MODE=ro
+[ "$ROLE" = server ] && MODE=rw
 mkdir -p /media
-mountpoint -q /media || mount -t vfat -o ro /dev/vda /media ||
+mountpoint -q /media || mount -t vfat -o "$MODE" /dev/vda /media ||
 	die "no FAT disk on /dev/vda (k3s + token live there)"
 [ -x /media/k3s ] || die "/media/k3s missing"
 [ -f /media/token ] || die "/media/token missing"
@@ -57,18 +75,63 @@ ip link set lo up
 ip link set eth0 up
 ip addr add "$IP" dev eth0
 ip route add default via "$GW"
+NODEIP=${IP%/*}
+if [ -n "$LAN" ]; then
+	ip link set eth1 up || die "svos.lan set but no eth1"
+	ip addr add "$LAN" dev eth1
+	NODEIP=${LAN%/*}
+fi
 
 # ---- files a minimal root lacks (Stage 5 lessons in parentheses) ----
 echo 'root:x:0:0:root:/:/bin/sh' > /etc/passwd   # kubelet mappings (4)
 echo 'root:x:0:' > /etc/group
 echo "nameserver $DNS" > /etc/resolv.conf
 # containerd copies /etc/hosts into every pod sandbox (12)
-printf '127.0.0.1 localhost\n%s %s\n' "${IP%/*}" "$NAME" > /etc/hosts
+printf '127.0.0.1 localhost\n%s %s\n' "$NODEIP" "$NAME" > /etc/hosts
 hostname "$NAME"                                  # the node name (7, 9)
 
-# ---- mounts kubelet and containerd need ----
-mkdir -p /sys/fs/cgroup /run /var/lib/rancher /var/lib/kubelet /var/log \
-	/etc/rancher/k3s /etc/cni /opt/cni /var/cache/misc
+# ---- where k3s keeps its state ----
+# tmpfs: the root is already a tmpfs (switch_root, lesson 14), so a plain
+# directory is enough — and it's gone at the next boot. disk: an ext4
+# volume survives reboots, so the cluster does too (lesson 19).
+mkdir -p /var/lib/rancher
+if [ "$DATA" = disk ]; then
+	mountpoint -q /var/lib/rancher ||
+		mount -t ext4 /dev/vdb /var/lib/rancher ||
+		die "svos.data=disk but no ext4 on /dev/vdb"
+fi
+
+mkdir -p /run /var/log /etc/rancher/k3s
+
+if [ "$ROLE" = server ]; then
+	# ---- start the k3s server (control plane only) ----
+	# --advertise-address: agents are told to come back to the eth1
+	# address, not 10.0.2.15 — every VM is 10.0.2.15 on its own slirp (3)
+	# --disable: only the pause image is in our registry
+	log "starting k3s server as $NAME on $NODEIP"
+	/media/k3s server --disable-agent \
+		--token-file /media/token \
+		--advertise-address "$NODEIP" --tls-san "$NODEIP" \
+		--write-kubeconfig-mode 644 \
+		--disable traefik,servicelb,metrics-server,local-storage,coredns \
+		> /var/log/k3s-server.log 2>&1 &
+	# hand the admin kubeconfig to the host (runk3s.sh reads it off the
+	# disk); it names https://127.0.0.1:6443, which QEMU forwards here
+	(
+		i=0
+		while [ ! -s /etc/rancher/k3s/k3s.yaml ] && [ $i -lt 180 ]; do
+			sleep 1; i=$((i + 1))
+		done
+		cp /etc/rancher/k3s/k3s.yaml /media/k3s.yaml && sync &&
+			log "kubeconfig written to the disk" ||
+			log "no kubeconfig after ${i}s (see /var/log/k3s-server.log)"
+	) &
+	log "k3s server started (log: /var/log/k3s-server.log)"
+	exit 0
+fi
+
+# ---- mounts kubelet and containerd need (agents) ----
+mkdir -p /sys/fs/cgroup /var/lib/kubelet /etc/cni /opt/cni /var/cache/misc
 mountpoint -q /sys/fs/cgroup || mount -t cgroup2 none /sys/fs/cgroup
 # kubelet needs a real mounted fs here (5)
 mountpoint -q /var/lib/kubelet || mount -t tmpfs none /var/lib/kubelet
@@ -77,9 +140,14 @@ mountpoint -q /var/lib/kubelet || mount -t tmpfs none /var/lib/kubelet
 [ -f /media/registries.yaml ] && cp /media/registries.yaml /etc/rancher/k3s/
 
 # ---- start k3s; its output goes to a file, never the console (8) ----
+# flannel's VXLAN must ride eth1 too, or pod traffic between nodes would
+# head for slirp, which can't reach the other VMs
+FLANNEL=
+[ -n "$LAN" ] && FLANNEL="--flannel-iface eth1"
 log "starting k3s agent as $NAME -> https://$SERVER:6443"
+# shellcheck disable=SC2086  # $FLANNEL is zero or two words
 /media/k3s agent --server "https://$SERVER:6443" \
-	--token-file /media/token --node-ip "${IP%/*}" \
+	--token-file /media/token --node-ip "$NODEIP" $FLANNEL \
 	> /var/log/k3s-agent.log 2>&1 &
 log "k3s agent started (log: /var/log/k3s-agent.log)"
 exit 0
