@@ -36,7 +36,8 @@
 #
 # SVOS_DATA=disk (server only) keeps the cluster on an ext4 volume
 # ($SCRATCH/earth-616.data.ext4) that survives reboots; the default,
-# tmpfs, starts a fresh cluster on every server boot (lesson 19).
+# tmpfs, starts a fresh cluster on every server boot. Stop a disk-backed
+# server with `reboot -f` on its console, not by killing QEMU (lesson 19).
 #
 # Every agent boot starts from a fresh initramfs, so the agent comes back
 # with a new node password. A server that remembers the old one rejects

@@ -86,8 +86,9 @@ Where the server keeps its state is your choice:
 - **`SVOS_DATA=disk ./web/runk3s.sh server`**: an ext4 volume
   (`~/svos-lab/earth-616.data.ext4`, created on first use) on
   `/dev/vdb`, mounted at `/var/lib/rancher`. The cluster survives server
-  reboots — **if the server is shut down cleanly**: type `poweroff -f`
-  (or at least `sync`) on its console, never just kill QEMU (lesson 19).
+  reboots — **if the server is shut down cleanly**: type `reboot -f` on
+  its console (QEMU exits, thanks to `-no-reboot`), never just kill QEMU
+  (lesson 19).
 
 `agent` resets the node's stale server-side state first (lesson 9) when
 the server is up, so re-booting a node is just running `agent` again.
@@ -270,8 +271,11 @@ must return: a hang would keep the console shell from ever starting
     `fsync` each commit, and Linux writes dirty pages back on its own
     clock (up to ~30 s). The same steps with `sync` typed on the server
     console before the kill kept both. A persistent server has to shut
-    down cleanly: `poweroff -f` (busybox syncs first; `-n` would skip
-    it). svos-init has no clean shutdown of its own yet.
+    down cleanly: `reboot -f` (busybox syncs first; `-n` would skip it),
+    which `-no-reboot` turns into QEMU exiting. Not `poweroff -f`: it
+    syncs too, but our kernel has no ACPI, so it can only halt the CPU —
+    "System halted" — and QEMU keeps running. svos-init has no clean
+    shutdown of its own yet.
 
 ## Next steps
 
@@ -315,7 +319,7 @@ Polish:
 - The join token is a fixed lab value (`svos-stage5`) written onto every
   node's disk; `svos-enroll` is meant to replace it.
 - k3s (server and agent) isn't supervised: if it dies, nothing restarts it.
-- A disk-backed server must be powered off from its console
-  (`poweroff -f`); killing QEMU can lose the last ~30 s of cluster
+- A disk-backed server must be shut down from its console
+  (`reboot -f`); killing QEMU can lose the last ~30 s of cluster
   writes (lesson 19).
 - `apk add` still carries `--allow-untrusted` (pubkey embedding pending).
