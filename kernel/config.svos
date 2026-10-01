@@ -24,6 +24,7 @@ CONFIG_MSDOS_FS=y
 CONFIG_VFAT_FS=y
 CONFIG_NLS_CODEPAGE_437=y    # vfat default codepage
 CONFIG_NLS_ISO8859_1=y       # vfat default iocharset
+CONFIG_EXT4_FS=y             # svos.data=disk: k3s state on a persistent volume
 # Stage 5: k3s (namespaces, cgroups, netfilter, overlayfs...)
 CONFIG_SYSVIPC=y             # k8s IPC namespaces
 CONFIG_POSIX_MQUEUE=y        # container runtime needs mqueue
