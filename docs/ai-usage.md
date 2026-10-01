@@ -29,7 +29,7 @@ changes (e.g. the Stage 5 BPF kernel options) carry no trailer.
 | 2 | docs/stage-2-init.md | silent mount failures = no console; menu gates (MISC_FILESYSTEMS); isolinux + ldlinux.c32 |
 | 3 | docs/stage-3-web.md | socket netdev = 1:1 pipe; nebula denies inbound; TUN needs NET_CORE gate (strike 3) |
 | 4 | docs/stage-4-apk.md | apk v2 = 3 gzip members; pkg-config shim; datahash covers payload |
-| 5 | docs/stage-5-k3s.md (pod Running; 3-node bar open) | k3s kernel reqs; slirp for VM→host; registry digests; cgroup v2 devices = eBPF; no pivot_root out of initramfs |
+| 5 | docs/stage-5-k3s.md (pod Running; auto-join; 3-node bar open) | k3s kernel reqs; slirp for VM→host; registry digests; cgroup v2 devices = eBPF; no pivot_root out of initramfs; PID 1 respawns only the shell |
 
 ## Working diary
 

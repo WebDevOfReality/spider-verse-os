@@ -94,10 +94,10 @@ This repo is built in public, so the receipts are public too.
 ## Status
 
 **Stage 5 in progress.** A pod runs on a Weaver node (`spider-test`
-Running on `weaver-a`, reproducible with `web/runk3s.sh`). Still open for
-the stage's exit criterion: a 3-node cluster that is all Weaver (the server
-runs on the host today) and enroll auto-join. Stage notes:
-`docs/stage-*.md`.
+Running on `weaver-a`, reproducible with `web/runk3s.sh`), and the node
+joins the cluster by itself at boot. Still open for the stage's exit
+criterion: a 3-node cluster that is all Weaver (the server runs on the
+host today) and `svos-enroll`. Stage notes: `docs/stage-*.md`.
 
 ## License
 

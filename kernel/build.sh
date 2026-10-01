@@ -50,7 +50,7 @@ done
 }
 
 # ---------- 1. busybox (static, musl) ----------
-if [ ! -x rootfs/bin/busybox ] || [ ! -f rootfs/init ]; then
+if [ ! -x rootfs/bin/busybox ]; then
 	fetch_verify "$BUSYBOX_URL" "$BUSYBOX_SHA256" "busybox-${BUSYBOX_VERSION}.tar.bz2"
 	rm -rf "busybox-${BUSYBOX_VERSION}"
 	tar xf "busybox-${BUSYBOX_VERSION}.tar.bz2"
@@ -63,23 +63,31 @@ if [ ! -x rootfs/bin/busybox ] || [ ! -f rootfs/init ]; then
 	mkdir -p rootfs/bin
 	cp "busybox-${BUSYBOX_VERSION}/busybox" rootfs/bin/busybox
 	"$HERE/rootfs/populate" rootfs/bin/busybox rootfs
-	cp "$HERE/rootfs/init" rootfs/init
-	chmod +x rootfs/init
-	# svos-init (Stage 2): our own PID 1, built from source
-	# rootfs/init is a shim that execs it so the kernel sees a scriptable
-	# entry point; svos-init itself is a static ELF at /sbin/svos-init
-	make -C "$HERE/../init" check >/dev/null
-	cp "$HERE/../init/svos-init" rootfs/sbin/svos-init
-	# etc: inittab + init.d boot/shutdown scripts (busybox-init fallback)
-	mkdir -p rootfs/etc/init.d
-	cp "$HERE/rootfs/etc/inittab" rootfs/etc/inittab
-	cp "$HERE/rootfs/etc/init.d/rcS" rootfs/etc/init.d/rcS
-	cp "$HERE/rootfs/etc/init.d/rcK" rootfs/etc/init.d/rcK
-	chmod +x rootfs/etc/init.d/rcS rootfs/etc/init.d/rcK
 	file rootfs/bin/busybox | grep -q 'statically linked' || {
 		echo "busybox is not static — aborting" >&2; exit 1
 	}
 fi
+
+# ---------- 1b. our own files: refreshed on every build ----------
+# (busybox is slow to rebuild, so it's cached above; these are ours and
+# change often — a stale copy here once hid an /init change)
+cp "$HERE/rootfs/init" rootfs/init
+chmod +x rootfs/init
+# svos-init (Stage 2): our own PID 1, built from source
+# rootfs/init is a shim that execs it so the kernel sees a scriptable
+# entry point; svos-init itself is a static ELF at /sbin/svos-init
+make -C "$HERE/../init" check >/dev/null
+cp "$HERE/../init/svos-init" rootfs/sbin/svos-init
+# etc: inittab + init.d boot/shutdown scripts (busybox-init fallback)
+mkdir -p rootfs/etc/init.d
+cp "$HERE/rootfs/etc/inittab" rootfs/etc/inittab
+cp "$HERE/rootfs/etc/init.d/rcS" rootfs/etc/init.d/rcS
+cp "$HERE/rootfs/etc/init.d/rcK" rootfs/etc/init.d/rcK
+chmod +x rootfs/etc/init.d/rcS rootfs/etc/init.d/rcK
+# svos-init's boot hook (Stage 5): role from the cmdline, k3s from disk
+mkdir -p rootfs/etc/svos
+cp "$HERE/rootfs/etc/svos/boot" rootfs/etc/svos/boot
+chmod +x rootfs/etc/svos/boot
 
 # ---------- 2. kernel ----------
 if [ ! -f "linux-${KERNEL_VERSION}/arch/x86/boot/bzImage" ]; then
